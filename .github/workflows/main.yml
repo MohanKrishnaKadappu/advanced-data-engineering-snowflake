@@ -1,4 +1,5 @@
 name: Deploy Templatized Data Environment 
+
 on: 
  pull_request: 
  types: 
@@ -6,23 +7,27 @@ on:
  branches: 
  - staging 
  - main 
+
  push: 
  branches: 
  - staging 
  - main 
+
 jobs: 
  deploy_data_environment: 
- if: github.event_name == 'push' || (github.event_name == 'pull_request' && 
- github.event.pull_request.merged == true) 
  name: Deploy data environment 
+ if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }} 
  runs-on: ubuntu-latest 
+
  env: 
  SNOWFLAKE_CONNECTIONS_ADVANCED_DATA_ENGINEERING_SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }} 
  SNOWFLAKE_CONNECTIONS_ADVANCED_DATA_ENGINEERING_SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }} 
  SNOWFLAKE_CONNECTIONS_ADVANCED_DATA_ENGINEERING_SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }} 
+
  steps: 
  - name: Checkout repository 
  uses: actions/checkout@v4 
+
  - name: Set environment 
  id: set_env 
  shell: bash 
@@ -41,19 +46,31 @@ jobs:
  echo "Unexpected branch: $TARGET_BRANCH" 
  exit 1 
  fi 
- - name: Install SnowflakeCLI 
- uses: snowflakedb/snowflake-cli-action@v1.5 
+
+ - name: Install Snowflake CLI 
+ uses: snowflakedb/snowflake-actions@v3 
  with: 
- cli-version: latest 
+ cli-version: "3.26.0" 
  default-config-file-path: config.toml 
+
+ - name: Test Snowflake connection 
+ run: | 
+ snow connection test --connection advanced_data_engineering_snowflake 
+
  - name: Fetch latest changes to Snowflake 
- run: snow git fetch course_repo.public.advanced_data_engineering_snowflake 
+ run: | 
+ snow git fetch COURSE_REPO.PUBLIC.ADVANCED_DATA_ENGINEERING_SNOWFLAKE \ 
+ --connection advanced_data_engineering_snowflake 
+
  - name: Deploy templates to data environment 
  shell: bash 
- run: > 
+ run: | 
  echo "Using branch: ${TARGET_BRANCH}" 
+ echo "Deploying environment: ${DEPLOY_ENV}" 
 
- snow git execute @advanced_data_engineering_snowflake/branches/${TARGET_BRANCH}/module-1/hamburg_weather/pipeline/data/ \ 
- -D "env='${{ env.DEPLOY_ENV }}'" \ 
- --database=COURSE_REPO \ 
- --schema=PUBLIC 
+ snow git execute \ 
+ @advanced_data_engineering_snowflake/branches/${TARGET_BRANCH}/module-1/hamburg_weather/pipeline/data/ \ 
+ --connection advanced_data_engineering_snowflake \ 
+ -D "env='${DEPLOY_ENV}'" \ 
+ --database COURSE_REPO \ 
+ --schema PUBLIC
